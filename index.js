@@ -62,7 +62,7 @@ function main() {
                 if (index === 0) {
                     console.log('received added')
                     latestDoc = change.doc.data()
-                } else if (index > 20) {
+                } else if (index > 15) {
                     change.doc.ref.delete();
                 }
             }
