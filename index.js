@@ -12,7 +12,8 @@ let serviceAccount = {};
 
 if (local) {
     serviceAccount = local.serviceAccount
-} else if (process.env.NODE_ENV === 'production') {
+}
+if (process.env.NODE_ENV === 'production') {
     serviceAccount = {
         "type": "service_account",
         "project_id": "cosmos-up",
@@ -68,6 +69,29 @@ async function fetchListsData() {
         }
     }
 }
+
+async function saveCanvas() {
+    const loading = await this.loadingController.create();
+    await loading.present();
+    var signature = this.signaturePad.toDataURL().slice(22);
+    this.signaturePhotoName = new Date().toJSON();
+    const fileStoragePath = `signatures/${this.signaturePhotoName}`;
+    const imageFireStorageReference = this.angularFireStorage.ref(fileStoragePath);
+    this.fireUploadTask = await this.angularFireStorage.ref(fileStoragePath)
+        .putString(signature, 'base64', { contentType: 'image/png'});
+    this.fireUploadTask.snapshotChanges().pipe(
+        finalize(() => {
+            const downloadURL = imageFireStorageReference.getDownloadURL();
+            downloadURL.subscribe(async url => {
+                if(url) {
+                    this.uploadedSignaturePhotoPath = url;
+                    this.report.signature = this.uploadedSignaturePhotoPath;
+                    this.reportForm.get('_signature').setValue(this.uploadedSignaturePhotoPath);
+                    await loading.dismiss();
+                }
+            })
+        })
+    ).subscribe();}
 
 function main() {
     const query = db.collection('Lists').orderBy("timestamp", "desc");
