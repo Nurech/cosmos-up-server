@@ -3,11 +3,16 @@ import express from 'express'
 import admin from "firebase-admin"
 import {setTimeout} from 'timers/promises';
 import {distinctUntilChanged, Subject, throttleTime} from "rxjs";
+import * as local from './local.js'
+import winston from "winston";
+
 const app = express();
 
 let serviceAccount = {};
 
-if (process.env.NODE_ENV === 'production') {
+if (local) {
+    serviceAccount = local.serviceAccount
+} else if (process.env.NODE_ENV === 'production') {
     serviceAccount = {
         "type": "service_account",
         "project_id": "cosmos-up",
@@ -22,6 +27,17 @@ if (process.env.NODE_ENV === 'production') {
     }
 }
 
+const logger = winston.createLogger({
+    transports: [
+        new winston.transports.Console({
+            level: 'info',
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.simple()
+            )
+        })
+    ]
+});
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -33,9 +49,8 @@ app.listen(PORT, function () {
     console.log(`Demo project at: ${PORT}!`);
 });
 
-const newDoc = new Subject();
+const newDocSubject = new Subject();
 let latestDoc;
-let lastDocValid;
 
 async function fetchListsData() {
     let tryFetch = true;
@@ -46,7 +61,7 @@ async function fetchListsData() {
             tryFetch = false;
             return await response.json();
         } catch (e) {
-            console.error(e)
+            logger.log('error', 'Encountered error fetching from API: ' + e);
             tries += 1;
             await setTimeout(5000 * tries);
             tryFetch = tries !== 20;
@@ -55,29 +70,38 @@ async function fetchListsData() {
 }
 
 function main() {
-    const query = db.collection('Lists').orderBy("validUntil", "desc");
+    const query = db.collection('Lists').orderBy("timestamp", "desc");
     const observer = query.onSnapshot(querySnapshot => {
         querySnapshot.docChanges().forEach((change, index) => {
+
             if (change.type === 'added') {
                 if (index === 0) {
-                    console.log('received added')
                     latestDoc = change.doc.data()
-                } else if (index > 15) {
-                    change.doc.ref.delete();
+                    logger.log('info', 'Confirming that latest list was added to db: ' + latestDoc.id);
                 }
             }
         }, err => {
-            console.log(`Encountered error: ${err}`);
+            logger.log('error', 'Encountered error connecting to firebase: ' + err);
             timer();
         });
+
+        // Delete more than 15 last documents
+        querySnapshot.docs.forEach((doc, index) => {
+            if (index > 14) {
+                logger.log('info', 'Deleting document: ' + doc.data().id);
+                doc.ref.delete();
+            }
+        })
     });
     timer();
 
 
-    newDoc.pipe(throttleTime(10000), distinctUntilChanged()).subscribe((doc) => {
-        db.collection('Lists').add(doc).then(() => {
-            console.log('new list added to db: ', doc.id);
-        })
+    newDocSubject.pipe(throttleTime(10000), distinctUntilChanged()).subscribe((list) => {
+        if (list?.id !== latestDoc?.id) {
+            db.collection('Lists').add(list).then(() => {
+                logger.log('info', 'Adding new list to db: ' + list.id);
+            })
+        }
     });
 }
 
@@ -90,14 +114,15 @@ async function timer() {
         await checkForNewData();
     } else if (latestDoc?.validUntil) {
         let now = new Date().getTime();
-        lastDocValid = latestDoc.validUntil.toDate().getTime();
+        let lastDocValid = new Date(latestDoc.validUntil).getTime();
         if (lastDocValid > now) {
             let sleepTime = lastDocValid - now + 5000
 
             let seconds = 0;
             const myInterval = setInterval(() => {
                 if (waiting) {
-                    console.log('waiting for updates, sleeping for seconds: ', (sleepTime / 1000) - seconds)
+                    let waitTime = Math.round((sleepTime / 1000) - seconds);
+                    logger.log('info', 'Waiting for updates, sleeping for: ' + waitTime);
                     seconds += 5;
                 }
             }, 5000);
@@ -124,22 +149,18 @@ async function checkForNewData() {
     let lastDocValid = Infinity;
 
     if (latestDoc?.validUntil) {
-        lastDocValid = latestDoc.validUntil.toDate().getTime();
+        lastDocValid = new Date(latestDoc.validUntil).getTime();
     }
 
-    console.log('now: ', new Date(now), 'lastDocValid: ', new Date(lastDocValid))
     if (latestDoc === null || latestDoc === undefined || lastDocValid < now) {
-
-        let data = await fetchListsData();
-        if (data?.validUntil) {
-            let doc = {list: data}
-            doc.validUntil = admin.firestore.Timestamp.fromDate(new Date(data.validUntil));
-            doc.id = data.id;
-            if (doc.id && doc.validUntil) {
-                if (doc.id !== latestDoc?.id) {
-                    newDoc.next(doc);
+        let newDoc = await fetchListsData();
+        if (newDoc?.validUntil) {
+            newDoc.timestamp = admin.firestore.Timestamp.fromDate(new Date(newDoc.validUntil));
+            if (newDoc.id && newDoc.validUntil) {
+                if (newDoc.id !== latestDoc?.id) {
+                    newDocSubject.next(newDoc);
                 } else {
-                    console.warn('latest list is in db: ', doc.id);
+                    logger.log('info', 'Latest list is already in db: ' + newDoc.id);
                 }
                 timer();
             }
@@ -147,6 +168,7 @@ async function checkForNewData() {
     } else {
         timer();
     }
+
 }
 
 main();
