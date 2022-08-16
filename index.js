@@ -5,6 +5,7 @@ import {setTimeout} from 'timers/promises';
 import {distinctUntilChanged, Subject, throttleTime} from "rxjs";
 import * as local from './local.js'
 import winston from "winston";
+import reverseLineReader from 'reverse-line-reader'
 
 const app = express();
 
@@ -36,7 +37,19 @@ const logger = winston.createLogger({
                 winston.format.colorize(),
                 winston.format.simple()
             )
-        })
+        }),
+        new winston.transports.File({
+            filename: 'logs.log',
+            format:winston.format.combine(
+                winston.format.timestamp({format: 'MMM-DD-YYYY HH:mm:ss'}),
+                winston.format.align(),
+                winston.format.printf(info => `${info.level}: ${[info.timestamp]}: ${info.message}`),
+            )}) ,
+        new winston.transports.File({
+            filename: 'logs.log',
+            format:winston.format.combine(
+                winston.format.printf(info => `<br>`),
+            )})
     ]
 });
 
@@ -70,7 +83,19 @@ async function fetchListsData() {
     }
 }
 
+
 function main() {
+
+    app.get('/', (req, res) => {
+       let logs = ''
+        // read all lines:
+        reverseLineReader.eachLine('logs.log', function(line) {
+            logs += line
+        }).then(function () {
+            res.send(logs)
+        });
+    })
+
     const query = db.collection('Lists').orderBy("timestamp", "desc");
     const observer = query.onSnapshot(querySnapshot => {
         querySnapshot.docChanges().forEach((change, index) => {
@@ -126,7 +151,7 @@ async function timer() {
                     logger.log('info', 'Waiting for updates, sleeping for: ' + waitTime);
                     seconds += 5;
                 }
-            }, 5000);
+            }, 10000);
 
             setTimeout(sleepTime).then(() => {
                 waiting = false;
