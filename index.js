@@ -138,14 +138,14 @@ async function timer() {
         let now = new Date().getTime();
         let lastDocValid = new Date(latestDoc.validUntil).getTime();
         if (lastDocValid > now) {
-            let sleepTime = lastDocValid - now + 10000
+            let sleepTime = lastDocValid - now + 5000
 
             let seconds = 0;
             const myInterval = setInterval(() => {
                 if (waiting) {
                     let waitTime = Math.round((sleepTime / 1000) - seconds);
                     logger.log('info', 'Waiting for updates, sleeping for: ' + waitTime);
-                    seconds += 5;
+                    seconds += 10;
                 }
             }, 10000);
 
