@@ -138,7 +138,7 @@ async function timer() {
         let now = new Date().getTime();
         let lastDocValid = new Date(latestDoc.validUntil).getTime();
         if (lastDocValid > now) {
-            let sleepTime = lastDocValid - now + 5000
+            let sleepTime = lastDocValid - now + 10000
 
             let seconds = 0;
             const myInterval = setInterval(() => {
