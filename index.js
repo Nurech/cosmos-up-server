@@ -44,11 +44,6 @@ const logger = winston.createLogger({
                 winston.format.timestamp({format: 'MMM-DD-YYYY HH:mm:ss'}),
                 winston.format.align(),
                 winston.format.printf(info => `${info.level}: ${[info.timestamp]}: ${info.message}`),
-            )}) ,
-        new winston.transports.File({
-            filename: 'logs.log',
-            format:winston.format.combine(
-                winston.format.printf(info => `<br>`),
             )})
     ]
 });
@@ -91,6 +86,7 @@ function main() {
         // read all lines:
         reverseLineReader.eachLine('logs.log', function(line) {
             logs += line
+            logs += `<br>`
         }).then(function () {
             res.send(logs)
         });
