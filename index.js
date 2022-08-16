@@ -3,7 +3,7 @@ import express from 'express'
 import admin from "firebase-admin"
 import {setTimeout} from 'timers/promises';
 import {distinctUntilChanged, Subject, throttleTime} from "rxjs";
-import * as local from './local.js'
+// import * as local from './local.js'
 import winston from "winston";
 import reverseLineReader from 'reverse-line-reader'
 
@@ -11,9 +11,9 @@ const app = express();
 
 let serviceAccount = {};
 
-if (local) {
-    serviceAccount = local.serviceAccount
-}
+// if (local) {
+//     serviceAccount = local.serviceAccount
+// }
 if (process.env.NODE_ENV === 'production') {
     serviceAccount = {
         "type": "service_account",
